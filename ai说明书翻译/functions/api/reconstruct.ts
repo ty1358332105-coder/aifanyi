@@ -182,14 +182,14 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   try {
     const { request, env } = context;
     const { imageBase64, mimeType, pageRange } = await request.json() as any;
-
+    const baseUrl = env.API_BASE_URL || "https://generativelanguage.googleapis.com";
     if (!env.GEMINI_API_KEY) {
       return new Response(JSON.stringify({ error: 'Missing API Key configuration' }), { status: 500 });
     }
 
     // 使用 gemini-1.5-flash，它更稳定且支持广泛
     const MODEL_NAME = "gemini-3-flash-preview"; 
-    const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${env.GEMINI_API_KEY}`;
+    const API_URL = `${baseUrl}/v1beta/models/${MODEL_NAME}:generateContent?key=${env.GEMINI_API_KEY}`;
 
     const payload = {
       contents: [
