@@ -1,18 +1,9 @@
-
 // ai说明书翻译/functions/api/reconstruct.ts
 
 interface Env {
   GEMINI_API_KEY: string;
-
-  // 推荐：用这两个拼出 Cloudflare AI Gateway provider baseUrl
-  CF_ACCOUNT_ID?: string;
-  CF_GATEWAY_ID?: string;
-
-  // 可选：你也可以直接在环境变量写死完整 provider baseUrl（必须包含 /google-ai-studio）
-  API_BASE_URL?: string;
-
-  // 可选：模型名
-  GEMINI_MODEL?: string;
+  // 如果你配置了环境变量 API_BASE_URL，就会用你的；否则默认用 Google 官方的
+  API_BASE_URL?: string; 
 }
 
 // --- 核心提示词：已包含多页生成逻辑 ---
@@ -59,78 +50,126 @@ Your goal is to produce **Raw HTML Code** that visually mirrors the original PDF
     * Keep Metric units.
 
 # HTML/CSS SPECIFICATIONS
-(…你的 CSS 规范原样保留…)
+
+Output a standalone HTML file. Note the CSS changes to support scrolling and printing multiple pages:
+
+\`\`\`css
+@page { size: A4; margin: 0; }
+body { 
+    margin: 0; 
+    padding: 20px; 
+    background: #525659; 
+    font-family: 'Helvetica Neue', Arial, sans-serif; 
+    -webkit-print-color-adjust: exact; 
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px; 
+}
+
+.page-container {
+    width: 210mm; 
+    height: 297mm; /* Strict A4 height */
+    padding: 10mm 15mm 15mm 15mm; 
+    background: white; 
+    overflow: hidden; 
+    position: relative;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.3); 
+    box-sizing: border-box;
+    font-size: 10.5pt; 
+    line-height: 1.35; 
+    color: #333;
+    page-break-after: always; 
+}
+
+.page-container:last-child {
+    page-break-after: auto;
+}
+
+@media print {
+    body { background: white; padding: 0; gap: 0; display: block; }
+    .page-container { margin: 0; box-shadow: none; border: none; width: 210mm; height: 297mm; overflow: hidden; }
+}
+
+/* COMPACT TYPOGRAPHY */
+h1 { font-size: 18pt; color: #000; margin-top: 0; margin-bottom: 6px; font-weight: bold; background: #eee; padding: 5px 8px; }
+h2 { font-size: 15pt; border-bottom: 2px solid #000; padding-bottom: 2px; margin-top: 10px; margin-bottom: 6px; }
+h3 { font-size: 11.5pt; font-weight: bold; margin-top: 8px; margin-bottom: 4px; }
+
+p, li { margin-bottom: 3px; }
+ul, ol { margin-top: 0; margin-bottom: 4px; padding-left: 1.2em; }
+
+/* LAYOUT GRID */
+.layout-grid { display: grid; grid-template-columns: 1fr 65mm; gap: 5mm; align-items: start; }
+
+/* IMAGES */
+.figure-container { width: 100%; margin-bottom: 5px; page-break-inside: avoid; }
+.figure-box {
+    width: 100%; border: 2px dashed #cbd5e1; border-radius: 6px; background-color: #f8fafc;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 4px; box-sizing: border-box; margin-bottom: 4px;
+    cursor: pointer; transition: all 0.2s ease; overflow: hidden;
+}
+.figure-box:hover { border-color: #3b82f6; background-color: #eff6ff; }
+.figure-content { pointer-events: none; }
+.figure-label { display: block; font-size: 9pt; font-weight: 600; color: #475569; }
+.figure-hint { display: block; font-size: 7.5pt; color: #94a3b8; margin-top: 2px; }
+
+/* TABLES */
+table.spec-table { width: 100%; border-collapse: collapse; margin: 5px 0; font-size: 8.5pt; }
+table.spec-table th, table.spec-table td { border: 1px solid #333; padding: 3px 5px; text-align: center; }
+table.spec-table th { background-color: #e2e8f0; font-weight: bold; }
+
+/* FOOTER */
+.page-footer {
+    position: absolute; bottom: 0; left: 0; width: 100%; height: 12mm;
+    padding: 0 15mm; display: flex; align-items: center; justify-content: flex-end;
+    background: white; z-index: 50; pointer-events: none;
+}
+.footer-content { border-top: 2px solid #000; width: 100%; padding-top: 2px; display: flex; justify-content: flex-end; }
+.footer-number { background: #000; color: #fff; padding: 1px 6px; font-weight: bold; font-size: 9pt; }
+\`\`\`
+
 STEP 3: GENERATE CODE
 Output only the raw HTML code. Ensure you create a separate .page-container for each page requested.
 `;
 
-const json = (status: number, body: any) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
-
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   try {
     const { request, env } = context;
-    const { imageBase64, mimeType, pageRange } = (await request.json()) as any;
+    const { imageBase64, mimeType, pageRange } = await request.json() as any;
 
     if (!env.GEMINI_API_KEY) {
-      return json(500, { error: "Missing GEMINI_API_KEY" });
-    }
-    if (!imageBase64 || !mimeType || !pageRange) {
-      return json(400, { error: "Missing imageBase64 / mimeType / pageRange" });
+      return new Response(JSON.stringify({ error: 'Missing API Key' }), { status: 500 });
     }
 
-    // 允许前端传 dataURL（data:image/png;base64,xxxx），这里做一次清洗
-    const cleanBase64 =
-      typeof imageBase64 === "string" && imageBase64.includes(",")
-        ? imageBase64.split(",")[1]
-        : imageBase64;
-
-    // --- 关键修改：确定 AI Gateway 的 Google AI Studio provider baseUrl ---
-    // Cloudflare 文档：provider 基址为
-    // https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_id}/google-ai-studio
-    // 并在后面拼 v1/models/{model}:{resource}（例如 :generateContent）[1](https://blog.csdn.net/2301_77187902/article/details/149547714)
-    let providerBaseUrl = (env.API_BASE_URL || "").trim();
-
-    if (!providerBaseUrl) {
-      if (!env.CF_ACCOUNT_ID || !env.CF_GATEWAY_ID) {
-        return json(500, {
-          error:
-            "Missing CF_ACCOUNT_ID/CF_GATEWAY_ID. Or set API_BASE_URL to the full google-ai-studio provider baseUrl.",
-        });
-      }
-      providerBaseUrl = `https://gateway.ai.cloudflare.com/v1/${env.CF_ACCOUNT_ID}/${env.CF_GATEWAY_ID}/google-ai-studio`;
-    }
-
-    // 模型名：先建议用稳定模型跑通，避免 preview 名称导致 400
-    const MODEL_NAME = (env.GEMINI_MODEL || "gemini-1.5-flash").trim();
-
-    // Cloudflare 文档给的 URL 结构：.../google-ai-studio/v1/models/{model}:generateContent [1](https://blog.csdn.net/2301_77187902/article/details/149547714)
-    const API_URL = `${providerBaseUrl}/v1/models/${MODEL_NAME}:generateContent`;
-
-    // ✅ 为了避免你之前 systemInstruction 字段在某些版本上触发 400
-    // 我们把 SYSTEM_INSTRUCTION 直接作为第一段 text parts 注入（不再用顶层 systemInstruction 字段）
-    const promptText = `Reconstruct Page ${pageRange}. Strictly follow the CSS for COMPACT WIREFRAME images and single-page fit. Ensure the content is dense enough to fit on one A4 page.`;
+    // --- 关键修改：动态选择 API 地址 ---
+    // 如果你在 Cloudflare 环境变量里设置了 API_BASE_URL，就用你的代理
+    // 否则默认使用 Google 官方地址
+    const baseUrl = env.API_BASE_URL || "https://generativelanguage.googleapis.com";
+    const MODEL_NAME = "gemini-3-flash-preview"; 
+    const API_URL = `${baseUrl}/v1beta/models/${MODEL_NAME}:generateContent`;
 
     const payload = {
       contents: [
         {
           role: "user",
           parts: [
-            { text: SYSTEM_INSTRUCTION },
             {
               inlineData: {
-                mimeType,
-                data: cleanBase64,
+                mimeType: mimeType,
+                data: imageBase64,
               },
             },
-            { text: promptText },
+            {
+              text: `Reconstruct Page ${pageRange}. Strictly follow the CSS for COMPACT WIREFRAME images and single-page fit. Ensure the content is dense enough to fit on one A4 page.`,
+            },
           ],
         },
       ],
-      // generationConfig 通常可用；如果你仍遇到 400，可以先注释掉这段做最小化排查
+      systemInstruction: {
+        parts: [{ text: SYSTEM_INSTRUCTION }]
+      },
       generationConfig: {
         temperature: 0.1,
       },
@@ -138,48 +177,36 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
     const response = await fetch(API_URL, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        // Cloudflare 文档示例：使用 x-goog-api-key 传 Google AI Studio key [1](https://blog.csdn.net/2301_77187902/article/details/149547714)
-        "x-goog-api-key": env.GEMINI_API_KEY,
+     headers: { 
+          "Content-Type": "application/json",
+          // 2. 新增下面这一行，把 Key 放在 Header 里传给 Cloudflare/Google
+          "x-goog-api-key": env.GEMINI_API_KEY 
       },
       body: JSON.stringify(payload),
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      let errorMsg = `Gemini API Error: ${response.status}`;
-
-      try {
-        const errJson = JSON.parse(errorText);
-        // Gemini 常见错误结构：{ error: { message: "..." } }
-        if (errJson?.error?.message) errorMsg = errJson.error.message;
-      } catch (_) {}
-
-      return json(response.status, {
-        error: errorMsg,
-        details: errorText,
-        debug: {
-          apiUrl: API_URL,
-          baseUrlUsed: providerBaseUrl,
-          model: MODEL_NAME,
-        },
-      });
+        const errorText = await response.text();
+        // 返回原始错误，方便调试
+        let errorMsg = `Gemini API Error: ${response.status}`;
+        try {
+            const errJson = JSON.parse(errorText);
+            if(errJson.error && errJson.error.message) {
+                errorMsg = errJson.error.message;
+            }
+        } catch(e) {}
+        
+        return new Response(JSON.stringify({ error: errorMsg, details: errorText }), { status: response.status });
     }
 
     const data: any = await response.json();
+    const generatedText = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
-    // Gemini REST 常见返回：candidates[0].content.parts[0].text
-    const generatedText =
-      data?.candidates?.[0]?.content?.parts?.map((p: any) => p?.text).filter(Boolean).join("\n") ||
-      data?.candidates?.[0]?.content?.parts?.[0]?.text ||
-      "";
-
-    return json(200, {
-      text: generatedText,
-      debug: { baseUrlUsed: providerBaseUrl, model: MODEL_NAME },
+    return new Response(JSON.stringify({ text: generatedText }), {
+      headers: { "Content-Type": "application/json" },
     });
+
   } catch (error: any) {
-    return json(500, { error: error?.message || String(error) });
+    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
 };
