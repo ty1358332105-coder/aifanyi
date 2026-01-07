@@ -147,10 +147,8 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     // 如果你在 Cloudflare 环境变量里设置了 API_BASE_URL，就用你的代理
     // 否则默认使用 Google 官方地址
     const baseUrl = env.API_BASE_URL || "https://generativelanguage.googleapis.com";
-    
-    // 使用 gemini-1.5-flash，速度快且稳定
     const MODEL_NAME = "gemini-3-flash-preview"; 
-    const API_URL = `${baseUrl}/v1beta/models/${MODEL_NAME}:generateContent?key=${env.GEMINI_API_KEY}`;
+    const API_URL = `${baseUrl}/v1beta/models/${MODEL_NAME}:generateContent`;
 
     const payload = {
       contents: [
@@ -179,7 +177,11 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
     const response = await fetch(API_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+     headers: { 
+          "Content-Type": "application/json",
+          // 2. 新增下面这一行，把 Key 放在 Header 里传给 Cloudflare/Google
+          "x-goog-api-key": env.GEMINI_API_KEY 
+      },
       body: JSON.stringify(payload),
     });
 
@@ -208,3 +210,4 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
 };
+https://gateway.ai.cloudflare.com/v1/dbe4368de74b18ced74f12c5c26cb44e/my-gemini-gateway/google-ai-studio
