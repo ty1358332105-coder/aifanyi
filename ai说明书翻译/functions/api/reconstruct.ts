@@ -2,9 +2,11 @@
 
 interface Env {
   GEMINI_API_KEY: string;
+  // 如果你配置了环境变量 API_BASE_URL，就会用你的；否则默认用 Google 官方的
+  API_BASE_URL?: string; 
 }
 
-// 你的系统提示词 (从 geminiService.ts 移过来，放在后端更安全)
+// --- 核心提示词：已包含多页生成逻辑 ---
 const SYSTEM_INSTRUCTION = `
 # ROLE DEFINITION
 You are the "Engineering Manual Reconstructor", an advanced AI specialized in converting Chinese HVAC engineering PDF pages into high-fidelity, A4-printable English HTML pages.
@@ -56,13 +58,13 @@ Output a standalone HTML file. Note the CSS changes to support scrolling and pri
 body { 
     margin: 0; 
     padding: 20px; 
-    background: #525659; /* Dark background to visualize pages */
+    background: #525659; 
     font-family: 'Helvetica Neue', Arial, sans-serif; 
     -webkit-print-color-adjust: exact; 
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 20px; /* Gap between pages on screen */
+    gap: 20px; 
 }
 
 .page-container {
@@ -77,30 +79,16 @@ body {
     font-size: 10.5pt; 
     line-height: 1.35; 
     color: #333;
-    page-break-after: always; /* CRITICAL: Forces new page when printing */
+    page-break-after: always; 
 }
 
-/* Ensure the last page doesn't produce a blank sheet */
 .page-container:last-child {
     page-break-after: auto;
 }
 
-/* PRINT OPTIMIZATION */
 @media print {
-    body { 
-        background: white; 
-        padding: 0; 
-        gap: 0;
-        display: block;
-    }
-    .page-container {
-        margin: 0;
-        box-shadow: none;
-        border: none;
-        width: 210mm;
-        height: 297mm;
-        overflow: hidden;
-    }
+    body { background: white; padding: 0; gap: 0; display: block; }
+    .page-container { margin: 0; box-shadow: none; border: none; width: 210mm; height: 297mm; overflow: hidden; }
 }
 
 /* COMPACT TYPOGRAPHY */
@@ -112,31 +100,15 @@ p, li { margin-bottom: 3px; }
 ul, ol { margin-top: 0; margin-bottom: 4px; padding-left: 1.2em; }
 
 /* LAYOUT GRID */
-.layout-grid {
-    display: grid;
-    grid-template-columns: 1fr 65mm; 
-    gap: 5mm;
-    align-items: start;
-}
+.layout-grid { display: grid; grid-template-columns: 1fr 65mm; gap: 5mm; align-items: start; }
 
 /* IMAGES */
 .figure-container { width: 100%; margin-bottom: 5px; page-break-inside: avoid; }
 .figure-box {
-    width: 100%;
-    border: 2px dashed #cbd5e1; 
-    border-radius: 6px;
-    background-color: #f8fafc;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    padding: 4px;
-    box-sizing: border-box;
-    margin-bottom: 4px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    overflow: hidden;
+    width: 100%; border: 2px dashed #cbd5e1; border-radius: 6px; background-color: #f8fafc;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 4px; box-sizing: border-box; margin-bottom: 4px;
+    cursor: pointer; transition: all 0.2s ease; overflow: hidden;
 }
 .figure-box:hover { border-color: #3b82f6; background-color: #eff6ff; }
 .figure-content { pointer-events: none; }
@@ -150,44 +122,33 @@ table.spec-table th { background-color: #e2e8f0; font-weight: bold; }
 
 /* FOOTER */
 .page-footer {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    width: 100%;
-    height: 12mm;
-    padding: 0 15mm;
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    background: white;
-    z-index: 50;
-    pointer-events: none;
+    position: absolute; bottom: 0; left: 0; width: 100%; height: 12mm;
+    padding: 0 15mm; display: flex; align-items: center; justify-content: flex-end;
+    background: white; z-index: 50; pointer-events: none;
 }
-.footer-content {
-    border-top: 2px solid #000;
-    width: 100%;
-    padding-top: 2px;
-    display: flex;
-    justify-content: flex-end;
-}
-.footer-number {
-    background: #000; color: #fff; padding: 1px 6px; font-weight: bold; font-size: 9pt;
-}
+.footer-content { border-top: 2px solid #000; width: 100%; padding-top: 2px; display: flex; justify-content: flex-end; }
+.footer-number { background: #000; color: #fff; padding: 1px 6px; font-weight: bold; font-size: 9pt; }
 \`\`\`
 
 STEP 3: GENERATE CODE
 Output only the raw HTML code. Ensure you create a separate .page-container for each page requested.
 `;
+
 export const onRequestPost: PagesFunction<Env> = async (context) => {
   try {
     const { request, env } = context;
     const { imageBase64, mimeType, pageRange } = await request.json() as any;
-    const baseUrl = env.API_BASE_URL || "https://generativelanguage.googleapis.com";
+
     if (!env.GEMINI_API_KEY) {
-      return new Response(JSON.stringify({ error: 'Missing API Key configuration' }), { status: 500 });
+      return new Response(JSON.stringify({ error: 'Missing API Key' }), { status: 500 });
     }
 
-    // 使用 gemini-1.5-flash，它更稳定且支持广泛
+    // --- 关键修改：动态选择 API 地址 ---
+    // 如果你在 Cloudflare 环境变量里设置了 API_BASE_URL，就用你的代理
+    // 否则默认使用 Google 官方地址
+    const baseUrl = env.API_BASE_URL || "https://generativelanguage.googleapis.com";
+    
+    // 使用 gemini-1.5-flash，速度快且稳定
     const MODEL_NAME = "gemini-3-flash-preview"; 
     const API_URL = `${baseUrl}/v1beta/models/${MODEL_NAME}:generateContent?key=${env.GEMINI_API_KEY}`;
 
@@ -224,7 +185,16 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
     if (!response.ok) {
         const errorText = await response.text();
-        return new Response(JSON.stringify({ error: `Gemini API Error: ${response.status}`, details: errorText }), { status: response.status });
+        // 返回原始错误，方便调试
+        let errorMsg = `Gemini API Error: ${response.status}`;
+        try {
+            const errJson = JSON.parse(errorText);
+            if(errJson.error && errJson.error.message) {
+                errorMsg = errJson.error.message;
+            }
+        } catch(e) {}
+        
+        return new Response(JSON.stringify({ error: errorMsg, details: errorText }), { status: response.status });
     }
 
     const data: any = await response.json();
