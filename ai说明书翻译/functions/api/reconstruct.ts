@@ -210,4 +210,3 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
 };
-https://gateway.ai.cloudflare.com/v1/dbe4368de74b18ced74f12c5c26cb44e/my-gemini-gateway/google-ai-studio
