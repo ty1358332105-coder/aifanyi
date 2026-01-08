@@ -50,7 +50,7 @@ const App: React.FC = () => {
               <Cpu size={24} />
             </div>
             <div>
-              <h1 className="font-bold text-lg text-slate-900 leading-tight">AI说明书翻译</h1>
+              <h1 className="font-bold text-lg text-slate-900 leading-tight">唐阳的AI说明书翻译</h1>
               <p className="text-xs text-slate-500">AI驱动的高保真翻译工具</p>
             </div>
           </div>
