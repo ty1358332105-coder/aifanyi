@@ -7,21 +7,21 @@ const CLIENT_SCRIPT = `
     const fileInput = document.createElement('input');
     fileInput.type = 'file'; fileInput.accept = 'image/*'; fileInput.style.display = 'none';
     document.body.appendChild(fileInput);
-    let currentBox: HTMLElement | null = null;
-    document.body.addEventListener('click', (e: MouseEvent) => {
-      const box = (e.target as HTMLElement).closest('.figure-box') as HTMLElement | null;
+    let currentBox = null;
+    document.body.addEventListener('click', (e) => {
+      const box = e.target.closest('.figure-box');
       if (box) { currentBox = box; fileInput.click(); }
     });
-    fileInput.addEventListener('change', (e: Event) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
       if (file && currentBox) {
         const reader = new FileReader();
         reader.onload = (evt) => {
-          const src = (evt.target as FileReader).result as string;
-          currentBox!.innerHTML = '<img src="' + src + '" style="width:100%;height:100%;object-fit:contain;border-radius:4px;" />';
-          currentBox!.style.border = 'none';
-          currentBox!.style.background = 'transparent';
-          currentBox!.style.padding = '0';
+          const src = evt.target.result;
+          currentBox.innerHTML = '<img src="' + src + '" style="width:100%;height:100%;object-fit:contain;border-radius:4px;" />';
+          currentBox.style.border = 'none';
+          currentBox.style.background = 'transparent';
+          currentBox.style.padding = '0';
         };
         reader.readAsDataURL(file);
       }
@@ -32,38 +32,96 @@ const CLIENT_SCRIPT = `
 </script>
 `;
 
-// ─── 模型预设 ─────────────────────────────────────────────────────────────────
+// ─── 模型预设（数据来源：各官方文档，截至 2026-04）────────────────────────────
 
 export const MODEL_PRESETS = [
+  // ── Gemini 系列（Google Gemini API）────────────────────────────────────────
   {
-    label: 'Gemini 2.5 Flash (默认)', value: 'gemini-2.5-flash-preview-04-17',
+    label: 'Gemini 2.5 Pro（最强推理）',
+    value: 'gemini-2.5-pro',
     protocol: 'gemini' as const,
-    baseUrl: 'https://generativelanguage.googleapis.com'
+    baseUrl: 'https://generativelanguage.googleapis.com',
   },
   {
-    label: 'Gemini 2.0 Flash', value: 'gemini-2.0-flash',
+    label: 'Gemini 2.5 Flash（推荐 · 高性价比）',
+    value: 'gemini-2.5-flash',
     protocol: 'gemini' as const,
-    baseUrl: 'https://generativelanguage.googleapis.com'
+    baseUrl: 'https://generativelanguage.googleapis.com',
   },
   {
-    label: 'Gemini 1.5 Pro', value: 'gemini-1.5-pro',
+    label: 'Gemini 2.5 Flash-Lite（最快最省）',
+    value: 'gemini-2.5-flash-lite',
     protocol: 'gemini' as const,
-    baseUrl: 'https://generativelanguage.googleapis.com'
+    baseUrl: 'https://generativelanguage.googleapis.com',
   },
   {
-    label: 'GPT-4o', value: 'gpt-4o',
-    protocol: 'openai' as const,
-    baseUrl: 'https://api.openai.com'
+    label: 'Gemini 3 Flash（前沿性能）',
+    value: 'gemini-3-flash',
+    protocol: 'gemini' as const,
+    baseUrl: 'https://generativelanguage.googleapis.com',
   },
   {
-    label: 'GPT-4o mini', value: 'gpt-4o-mini',
+    label: 'Gemini 3.1 Pro（旗舰推理）',
+    value: 'gemini-3.1-pro',
+    protocol: 'gemini' as const,
+    baseUrl: 'https://generativelanguage.googleapis.com',
+  },
+  // ── OpenAI 系列────────────────────────────────────────────────────────────
+  {
+    label: 'GPT-5（旗舰）',
+    value: 'gpt-5',
     protocol: 'openai' as const,
-    baseUrl: 'https://api.openai.com'
+    baseUrl: 'https://api.openai.com',
   },
   {
-    label: '自定义模型', value: 'custom',
+    label: 'GPT-5 mini（高性价比）',
+    value: 'gpt-5-mini',
     protocol: 'openai' as const,
-    baseUrl: ''
+    baseUrl: 'https://api.openai.com',
+  },
+  {
+    label: 'GPT-4.1',
+    value: 'gpt-4.1',
+    protocol: 'openai' as const,
+    baseUrl: 'https://api.openai.com',
+  },
+  {
+    label: 'GPT-4.1 mini',
+    value: 'gpt-4.1-mini',
+    protocol: 'openai' as const,
+    baseUrl: 'https://api.openai.com',
+  },
+  {
+    label: 'GPT-4o',
+    value: 'gpt-4o',
+    protocol: 'openai' as const,
+    baseUrl: 'https://api.openai.com',
+  },
+  // ── Claude 系列（Anthropic API，OpenAI 兼容格式）──────────────────────────
+  {
+    label: 'Claude Opus 4.6（最强）',
+    value: 'claude-opus-4-6',
+    protocol: 'openai' as const,
+    baseUrl: 'https://api.anthropic.com',
+  },
+  {
+    label: 'Claude Sonnet 4.6（均衡）',
+    value: 'claude-sonnet-4-6',
+    protocol: 'openai' as const,
+    baseUrl: 'https://api.anthropic.com',
+  },
+  {
+    label: 'Claude Haiku 4.5（最快）',
+    value: 'claude-haiku-4-5',
+    protocol: 'openai' as const,
+    baseUrl: 'https://api.anthropic.com',
+  },
+  // ── 自定义 ────────────────────────────────────────────────────────────────
+  {
+    label: '自定义模型',
+    value: 'custom',
+    protocol: 'openai' as const,
+    baseUrl: '',
   },
 ] as const;
 
@@ -72,19 +130,17 @@ export type ModelPreset = typeof MODEL_PRESETS[number];
 // ─── 类型定义 ─────────────────────────────────────────────────────────────────
 
 export interface ApiConfig {
-  apiKey:            string;
-  baseUrl:           string;
-  modelName:         string;
-  apiProtocol:       'gemini' | 'openai';
+  apiKey:      string;
+  baseUrl:     string;
+  modelName:   string;
+  apiProtocol: 'gemini' | 'openai';
 }
 
 export interface UsageStats {
-  inputTokens:      number;
-  outputTokens:     number;
-  totalTokens:      number;
+  inputTokens:  number;
+  outputTokens: number;
+  totalTokens:  number;
 }
-
-
 
 // ─── localStorage 持久化 ──────────────────────────────────────────────────────
 
@@ -173,10 +229,10 @@ async function callReconstructAPI(
 
   const body: Record<string, unknown> = { imageBase64, mimeType, pageRange };
   if (apiConfig?.apiKey) {
-    body.userApiKey   = apiConfig.apiKey;
-    body.userBaseUrl  = apiConfig.baseUrl;
-    body.modelName    = apiConfig.modelName;
-    body.apiProtocol  = apiConfig.apiProtocol;
+    body.userApiKey  = apiConfig.apiKey;
+    body.userBaseUrl = apiConfig.baseUrl;
+    body.modelName   = apiConfig.modelName;
+    body.apiProtocol = apiConfig.apiProtocol;
   }
 
   const response = await fetch('/api/reconstruct', {
@@ -199,7 +255,7 @@ async function callReconstructAPI(
   const usage: UsageStats = {
     inputTokens,
     outputTokens,
-    totalTokens:      rawUsage.totalTokens || inputTokens + outputTokens,
+    totalTokens: rawUsage.totalTokens || inputTokens + outputTokens,
   };
 
   return { html: rawHtml, usage };
@@ -244,9 +300,9 @@ export const reconstructManualPages = async (
     if (i === 0) firstBatchHtml = batchHtml;
     allContainers.push(...extractPageContainers(batchHtml));
 
-    cumUsage.inputTokens      += batchUsage.inputTokens;
-    cumUsage.outputTokens     += batchUsage.outputTokens;
-    cumUsage.totalTokens      += batchUsage.totalTokens;
+    cumUsage.inputTokens  += batchUsage.inputTokens;
+    cumUsage.outputTokens += batchUsage.outputTokens;
+    cumUsage.totalTokens  += batchUsage.totalTokens;
 
     if (onProgress)    onProgress(i + 1, total);
     if (onUsageUpdate) onUsageUpdate({ ...cumUsage });

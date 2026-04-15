@@ -112,11 +112,10 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     const {
       imageBase64, mimeType, pageRange,
       userApiKey, userBaseUrl,
-      modelName    = 'gemini-2.5-flash-preview-04-17',
-      apiProtocol  = 'gemini',
+      modelName   = 'gemini-2.5-flash',
+      apiProtocol = 'gemini',
     } = body;
 
-    // 优先用户传入的 Key，其次环境变量
     const resolvedApiKey  = userApiKey  || env.GEMINI_API_KEY;
     const resolvedBaseUrl = userBaseUrl || env.API_BASE_URL || (
       apiProtocol === 'openai'
@@ -169,7 +168,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
         totalTokens:  u.totalTokenCount      || 0,
       };
 
-    // ── OpenAI 兼容协议 ───────────────────────────────────────────────────
+    // ── OpenAI 兼容协议（包括 Claude）────────────────────────────────────
     } else if (apiProtocol === 'openai') {
       const API_URL = `${resolvedBaseUrl}/v1/chat/completions`;
       const payload = {
@@ -197,7 +196,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       });
       if (!res.ok) {
         const errText = await res.text();
-        let msg = `OpenAI API Error: ${res.status}`;
+        let msg = `API Error: ${res.status}`;
         try { const j = JSON.parse(errText); if (j.error?.message) msg = j.error.message; } catch {}
         return new Response(JSON.stringify({ error: msg, details: errText }), { status: res.status });
       }

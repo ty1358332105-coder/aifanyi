@@ -22,12 +22,13 @@ const App: React.FC = () => {
   const [usedModel, setUsedModel]   = useState<string>('');
 
   // API 设置
-  const [showApiSettings, setShowApiSettings]   = useState(false);
-  const [apiKey, setApiKey]                     = useState('');
-  const [baseUrl, setBaseUrl]                   = useState('');
-  const [selectedPreset, setSelectedPreset]     = useState<ModelPreset>(MODEL_PRESETS[0]);
-  const [customModelName, setCustomModelName]   = useState('');
-  const [savedToast, setSavedToast]             = useState(false);
+  const [showApiSettings, setShowApiSettings] = useState(false);
+  const [apiKey, setApiKey]               = useState('');
+  const [baseUrl, setBaseUrl]             = useState('');
+  // 默认选中 MODEL_PRESETS[1]：Gemini 2.5 Flash（推荐）
+  const [selectedPreset, setSelectedPreset] = useState<ModelPreset>(MODEL_PRESETS[1]);
+  const [customModelName, setCustomModelName] = useState('');
+  const [savedToast, setSavedToast]       = useState(false);
 
   const isCustom = selectedPreset.value === 'custom';
 
@@ -40,14 +41,11 @@ const App: React.FC = () => {
     const preset = MODEL_PRESETS.find(p => p.value === config.modelName)
                 ?? MODEL_PRESETS.find(p => p.value === 'custom')!;
     setSelectedPreset(preset as ModelPreset);
-    if (preset.value === 'custom') {
-      setCustomModelName(config.modelName || '');
-    }
+    if (preset.value === 'custom') setCustomModelName(config.modelName || '');
   }, []);
 
-  // 选择预设时自动填充 BaseURL
   const handlePresetChange = (value: string) => {
-    const preset = MODEL_PRESETS.find(p => p.value === value) ?? MODEL_PRESETS[0];
+    const preset = MODEL_PRESETS.find(p => p.value === value) ?? MODEL_PRESETS[1];
     setSelectedPreset(preset as ModelPreset);
     if (preset.value !== 'custom' && preset.baseUrl) setBaseUrl(preset.baseUrl);
     else if (preset.value === 'custom') setBaseUrl('');
@@ -55,19 +53,15 @@ const App: React.FC = () => {
 
   const handleSaveConfig = () => {
     const finalModelName = isCustom ? customModelName : selectedPreset.value;
-    saveApiConfig({
-      apiKey, baseUrl,
-      modelName:         finalModelName,
-      apiProtocol:       selectedPreset.protocol,
-    });
+    saveApiConfig({ apiKey, baseUrl, modelName: finalModelName, apiProtocol: selectedPreset.protocol });
     setSavedToast(true);
     setTimeout(() => setSavedToast(false), 2000);
   };
 
   const handleClearConfig = () => {
     setApiKey(''); setBaseUrl('');
-    setSelectedPreset(MODEL_PRESETS[0] as ModelPreset);
-    setCustomModelName(''); setCustomInputPrice('0'); setCustomOutputPrice('0');
+    setSelectedPreset(MODEL_PRESETS[1] as ModelPreset);
+    setCustomModelName('');
     clearApiConfig();
   };
 
@@ -83,19 +77,17 @@ const App: React.FC = () => {
     setTimeout(async () => {
       setStatus(AppStatus.GENERATING);
 
-      // 预算批数，立即初始化进度条
       let initialTotal = 1;
       try {
         initialTotal = chunkPages(parsePageRange(pageInput), CHUNK_SIZE).length;
       } catch (_) {}
       setProgress({ current: 0, total: initialTotal });
 
-      // 构建 ApiConfig
       const apiConfig: ApiConfig | undefined = apiKey ? {
         apiKey,
         baseUrl: baseUrl || selectedPreset.baseUrl,
-        modelName:         finalModelName,
-        apiProtocol:       selectedPreset.protocol,
+        modelName:   finalModelName,
+        apiProtocol: selectedPreset.protocol,
       } : undefined;
 
       try {
@@ -147,7 +139,6 @@ const App: React.FC = () => {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {/* API 设置按钮 */}
             <button
               onClick={() => setShowApiSettings(v => !v)}
               className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-full border transition-all
@@ -157,12 +148,11 @@ const App: React.FC = () => {
               {apiKey ? (
                 <span className="flex items-center gap-1">
                   <span className="w-2 h-2 rounded-full bg-green-500" />
-                  <span className="hidden sm:inline max-w-[100px] truncate text-xs">{displayModelName}</span>
+                  <span className="hidden sm:inline max-w-[120px] truncate text-xs">{displayModelName}</span>
                 </span>
               ) : 'API 设置'}
               <ChevronDown size={12} className={`transition-transform ${showApiSettings ? 'rotate-180' : ''}`} />
             </button>
-            {/* 系统状态 */}
             <div className="hidden md:flex items-center gap-2 text-sm text-slate-500 bg-slate-50 px-3 py-1 rounded-full border border-slate-200">
               <span className={`w-2 h-2 rounded-full ${status === AppStatus.GENERATING ? 'bg-amber-500 animate-pulse' : 'bg-green-500'}`} />
               系统就绪
@@ -200,22 +190,19 @@ const App: React.FC = () => {
                   </select>
                   <ChevronDown size={14} className="absolute right-3 top-2.5 text-amber-400 pointer-events-none" />
                 </div>
-                
               </div>
 
               {/* 自定义模型名称 */}
               {isCustom && (
-                <>
-                  <div>
-                    <label className="block text-xs font-medium text-amber-800 mb-1">自定义模型名称</label>
-                    <input
-                      type="text" value={customModelName}
-                      onChange={e => setCustomModelName(e.target.value)}
-                      placeholder="例如: claude-3-5-sonnet-20241022"
-                      className="w-full px-3 py-2 text-sm bg-white border border-amber-200 rounded-lg focus:ring-2 focus:ring-amber-400 outline-none"
-                    />
-                  </div>
-                </>
+                <div>
+                  <label className="block text-xs font-medium text-amber-800 mb-1">自定义模型名称</label>
+                  <input
+                    type="text" value={customModelName}
+                    onChange={e => setCustomModelName(e.target.value)}
+                    placeholder="例如: claude-opus-4-6 或 deepseek-chat"
+                    className="w-full px-3 py-2 text-sm bg-white border border-amber-200 rounded-lg focus:ring-2 focus:ring-amber-400 outline-none"
+                  />
+                </div>
               )}
 
               {/* API Key */}
@@ -243,7 +230,6 @@ const App: React.FC = () => {
                 />
               </div>
 
-              {/* 操作按钮 */}
               <div className="flex gap-2 pt-1">
                 <button onClick={handleSaveConfig}
                   className="flex-1 bg-amber-500 hover:bg-amber-600 text-white text-sm py-1.5 rounded-lg font-medium transition-all">
@@ -257,7 +243,7 @@ const App: React.FC = () => {
             </div>
           )}
 
-          {/* ── 主控制卡片 ── */}
+          {/* ── 主控制卡 ── */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
             <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4 flex items-center gap-2">
               <span className="bg-slate-100 text-slate-600 w-6 h-6 rounded flex items-center justify-center text-xs">1</span>
@@ -297,7 +283,6 @@ const App: React.FC = () => {
                   <><span>开始重构</span><ChevronRight size={18} /></>
                 )}
               </button>
-              {/* 当前模型提示 */}
               <p className="text-center text-xs text-slate-400 mt-2">
                 当前模型：<span className="font-medium text-slate-500">{displayModelName}</span>
               </p>
@@ -355,9 +340,7 @@ const App: React.FC = () => {
                   <span className="text-xs font-normal text-green-600 bg-green-100 px-1.5 py-0.5 rounded-full">翻译完成</span>
                 )}
               </p>
-              {usedModel && (
-                <p className="text-xs opacity-60 mb-2 truncate">模型：{usedModel}</p>
-              )}
+              {usedModel && <p className="text-xs opacity-60 mb-2 truncate">模型：{usedModel}</p>}
               <div className="space-y-1 text-xs">
                 <div className="flex justify-between">
                   <span className="opacity-70">输入 Tokens</span>
