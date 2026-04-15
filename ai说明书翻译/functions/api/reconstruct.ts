@@ -112,7 +112,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     const {
       imageBase64, mimeType, pageRange,
       userApiKey, userBaseUrl,
-      modelName   = 'gemini-2.5-flash',
+      modelName   = 'gemini-3.1-pro-preview',
       apiProtocol = 'gemini',
     } = body;
 
