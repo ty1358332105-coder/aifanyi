@@ -25,8 +25,10 @@ const App: React.FC = () => {
   const [showApiSettings, setShowApiSettings] = useState(false);
   const [apiKey, setApiKey]               = useState('');
   const [baseUrl, setBaseUrl]             = useState('');
-  // 默认选中 MODEL_PRESETS[1]：Gemini 2.5 Flash（推荐）
-  const [selectedPreset, setSelectedPreset] = useState<ModelPreset>(MODEL_PRESETS[1]);
+  // 默认：Gemini 3.1 Pro；额度用完时可切换为 Gemini 3 Flash
+  const [selectedPreset, setSelectedPreset] = useState<ModelPreset>(
+    MODEL_PRESETS.find(p => p.value === 'gemini-3.1-pro')! as ModelPreset
+  );
   const [customModelName, setCustomModelName] = useState('');
   const [savedToast, setSavedToast]       = useState(false);
 
@@ -45,7 +47,8 @@ const App: React.FC = () => {
   }, []);
 
   const handlePresetChange = (value: string) => {
-    const preset = MODEL_PRESETS.find(p => p.value === value) ?? MODEL_PRESETS[1];
+    const preset = MODEL_PRESETS.find(p => p.value === value)
+                ?? MODEL_PRESETS.find(p => p.value === 'gemini-3.1-pro')!;
     setSelectedPreset(preset as ModelPreset);
     if (preset.value !== 'custom' && preset.baseUrl) setBaseUrl(preset.baseUrl);
     else if (preset.value === 'custom') setBaseUrl('');
@@ -60,7 +63,8 @@ const App: React.FC = () => {
 
   const handleClearConfig = () => {
     setApiKey(''); setBaseUrl('');
-    setSelectedPreset(MODEL_PRESETS[1] as ModelPreset);
+    // 清除时重置回默认模型：Gemini 3.1 Pro
+    setSelectedPreset(MODEL_PRESETS.find(p => p.value === 'gemini-3.1-pro')! as ModelPreset);
     setCustomModelName('');
     clearApiConfig();
   };
@@ -190,6 +194,9 @@ const App: React.FC = () => {
                   </select>
                   <ChevronDown size={14} className="absolute right-3 top-2.5 text-amber-400 pointer-events-none" />
                 </div>
+                <p className="text-xs text-amber-500 mt-1">
+                  💡 默认 Gemini 3.1 Pro；额度用完可切换为 Gemini 3 Flash
+                </p>
               </div>
 
               {/* 自定义模型名称 */}
