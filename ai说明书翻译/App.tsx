@@ -1,17 +1,20 @@
 import React, { useState } from 'react';
 import { FileUpload } from './components/FileUpload';
 import { ResultDisplay } from './components/ResultDisplay';
-import { reconstructManualPages } from './services/geminiService';
+import { reconstructManualPages, parsePageRange, chunkPages } from './services/geminiService';
 import { AppStatus, FileData } from './types';
 import { Cpu, ChevronRight, Loader2, AlertCircle } from 'lucide-react';
 
+const CHUNK_SIZE = 2; // 每批提交的页数
+
 const App: React.FC = () => {
-  const [status, setStatus]       = useState<AppStatus>(AppStatus.IDLE);
-  const [fileData, setFileData]   = useState<FileData | null>(null);
-  const [pageInput, setPageInput] = useState<string>('1');
+  const [status, setStatus]         = useState<AppStatus>(AppStatus.IDLE);
+  const [fileData, setFileData]     = useState<FileData | null>(null);
+  const [pageInput, setPageInput]   = useState<string>('1');
   const [resultHtml, setResultHtml] = useState<string | null>(null);
-  const [errorMsg, setErrorMsg]   = useState<string | null>(null);
-  const [progress, setProgress]   = useState<{ current: number; total: number } | null>(null);
+  const [errorMsg, setErrorMsg]     = useState<string | null>(null);
+  // progress.current = 已完成批次数 (0 表示还没有批次完成); progress.total = 总批次数
+  const [progress, setProgress]     = useState<{ current: number; total: number } | null>(null);
 
   const handleReconstruct = async () => {
     if (!fileData || !pageInput) return;
@@ -22,12 +25,25 @@ const App: React.FC = () => {
 
     setTimeout(async () => {
       setStatus(AppStatus.GENERATING);
+
+      // ── 关键修复：提前计算总批数并立即初始化进度条 ──
+      let initialTotal = 1;
+      try {
+        const pages = parsePageRange(pageInput);
+        const chunks = chunkPages(pages, CHUNK_SIZE);
+        initialTotal = chunks.length;
+      } catch (_) {
+        // 页码解析失败时保持默认值 1，不阻断流程
+      }
+      // 立即设置 progress，使进度条在第一批开始前就可见
+      setProgress({ current: 0, total: initialTotal });
+
       try {
         const html = await reconstructManualPages(
           fileData.base64,
           fileData.mimeType,
           pageInput,
-          2, // 每批 2 页
+          CHUNK_SIZE,
           (current, total) => setProgress({ current, total }),
         );
         setResultHtml(html);
@@ -47,6 +63,20 @@ const App: React.FC = () => {
     setProgress(null);
   };
 
+  // 进度条宽度：current=0 时显示 5% 的起始宽度，让用户感知到进度条已就绪
+  const progressPercent = progress
+    ? progress.current === 0
+      ? 5
+      : Math.round((progress.current / progress.total) * 100)
+    : 0;
+
+  // 进度状态文字
+  const progressLabel = progress
+    ? progress.current === 0
+      ? `正在提交第 1 / ${progress.total} 批，请稍候...`
+      : `正在处理第 ${progress.current} / ${progress.total} 批，翻译内容并映射工程图表...`
+    : '正在生成 HTML 结构，翻译内容并映射工程图表...';
+
   return (
     <div className="min-h-screen flex flex-col">
       {/* Header */}
@@ -57,7 +87,7 @@ const App: React.FC = () => {
               <Cpu size={24} />
             </div>
             <div>
-              <h1 className="font-bold text-lg text-slate-900 leading-tight">唐阳的AI说明书翻译V2</h1>
+              <h1 className="font-bold text-lg text-slate-900 leading-tight">唐阳的AI说明书翻译</h1>
               <p className="text-xs text-slate-500">AI驱动的高保真翻译工具</p>
             </div>
           </div>
@@ -136,23 +166,26 @@ const App: React.FC = () => {
                 <p className="text-xs mt-1 opacity-80">
                   {status === AppStatus.LOCATING_PAGE
                     ? `正在定位物理 PDF 页码 [${pageInput}]。（忽略印刷页码）`
-                    : progress
-                      ? `正在处理第 ${progress.current} / ${progress.total} 批，翻译内容并映射工程图表...`
-                      : '正在生成 HTML 结构，翻译内容并映射工程图表...'}
+                    : progressLabel}
                 </p>
 
-                {/* 进度条 —— 仅在 GENERATING 且有进度数据时展示 */}
-                {status === AppStatus.GENERATING && progress && (
+                {/* 进度条：仅在 GENERATING 且总批次 > 1 时展示 */}
+                {status === AppStatus.GENERATING && progress && progress.total > 1 && (
                   <div className="mt-3">
                     <div className="w-full bg-blue-100 rounded-full h-2 overflow-hidden">
                       <div
-                        className="bg-blue-500 h-2 rounded-full transition-all duration-500"
-                        style={{ width: `${(progress.current / progress.total) * 100}%` }}
+                        className="bg-blue-500 h-2 rounded-full transition-all duration-700 ease-out"
+                        style={{ width: `${progressPercent}%` }}
                       />
                     </div>
-                    <p className="text-xs text-blue-600 mt-1 text-right">
-                      {progress.current} / {progress.total} 批完成
-                    </p>
+                    <div className="flex justify-between items-center mt-1">
+                      <p className="text-xs text-blue-500 opacity-70">
+                        每批 {CHUNK_SIZE} 页
+                      </p>
+                      <p className="text-xs text-blue-600 font-medium">
+                        {progress.current} / {progress.total} 批完成
+                      </p>
+                    </div>
                   </div>
                 )}
               </div>
