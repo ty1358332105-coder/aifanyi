@@ -1,34 +1,40 @@
 import React, { useState } from 'react';
 import { FileUpload } from './components/FileUpload';
 import { ResultDisplay } from './components/ResultDisplay';
-import { reconstructManualPage } from './services/geminiService';
+import { reconstructManualPages } from './services/geminiService';
 import { AppStatus, FileData } from './types';
 import { Cpu, ChevronRight, Loader2, AlertCircle } from 'lucide-react';
 
 const App: React.FC = () => {
-  const [status, setStatus] = useState<AppStatus>(AppStatus.IDLE);
-  const [fileData, setFileData] = useState<FileData | null>(null);
+  const [status, setStatus]       = useState<AppStatus>(AppStatus.IDLE);
+  const [fileData, setFileData]   = useState<FileData | null>(null);
   const [pageInput, setPageInput] = useState<string>('1');
   const [resultHtml, setResultHtml] = useState<string | null>(null);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg]   = useState<string | null>(null);
+  const [progress, setProgress]   = useState<{ current: number; total: number } | null>(null);
 
   const handleReconstruct = async () => {
     if (!fileData || !pageInput) return;
 
     setErrorMsg(null);
+    setProgress(null);
     setStatus(AppStatus.LOCATING_PAGE);
 
-    // Simulate the "Locating Physical PDF Page(s)..." delay from the prompt role definition
-    // This gives the user feedback matching the requested persona.
     setTimeout(async () => {
       setStatus(AppStatus.GENERATING);
       try {
-        const html = await reconstructManualPage(fileData.base64, fileData.mimeType, pageInput);
+        const html = await reconstructManualPages(
+          fileData.base64,
+          fileData.mimeType,
+          pageInput,
+          2, // 每批 2 页
+          (current, total) => setProgress({ current, total }),
+        );
         setResultHtml(html);
         setStatus(AppStatus.COMPLETE);
       } catch (e: any) {
         console.error(e);
-        setErrorMsg(e.message || "重构过程中发生错误。");
+        setErrorMsg(e.message || '重构过程中发生错误。');
         setStatus(AppStatus.ERROR);
       }
     }, 1500);
@@ -38,6 +44,7 @@ const App: React.FC = () => {
     setStatus(AppStatus.IDLE);
     setResultHtml(null);
     setErrorMsg(null);
+    setProgress(null);
   };
 
   return (
@@ -62,7 +69,7 @@ const App: React.FC = () => {
       </header>
 
       <main className="flex-1 max-w-7xl mx-auto w-full p-4 lg:p-8 grid lg:grid-cols-12 gap-8">
-        
+
         {/* Left Control Panel */}
         <div className="lg:col-span-4 flex flex-col gap-6">
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
@@ -71,7 +78,7 @@ const App: React.FC = () => {
               源文件
             </h2>
             <FileUpload fileData={fileData} onFileSelect={setFileData} />
-            
+
             <div className="mt-6">
               <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider mb-4 flex items-center gap-2">
                 <span className="bg-slate-100 text-slate-600 w-6 h-6 rounded flex items-center justify-center text-xs">2</span>
@@ -80,8 +87,8 @@ const App: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">物理页码</label>
                 <div className="relative">
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     value={pageInput}
                     onChange={(e) => setPageInput(e.target.value)}
                     placeholder="例如：5 或 5-6"
@@ -122,37 +129,54 @@ const App: React.FC = () => {
           {status !== AppStatus.IDLE && status !== AppStatus.COMPLETE && status !== AppStatus.ERROR && (
             <div className="bg-blue-50 text-blue-800 p-4 rounded-xl border border-blue-100 flex items-start gap-3 animate-in fade-in slide-in-from-bottom-4 duration-500">
               <Loader2 className="animate-spin shrink-0 mt-0.5" size={18} />
-              <div>
+              <div className="w-full">
                 <p className="font-semibold text-sm">
-                  {status === AppStatus.LOCATING_PAGE ? "系统激活" : "分析结构"}
+                  {status === AppStatus.LOCATING_PAGE ? '系统激活' : '分析结构'}
                 </p>
                 <p className="text-xs mt-1 opacity-80">
-                  {status === AppStatus.LOCATING_PAGE 
+                  {status === AppStatus.LOCATING_PAGE
                     ? `正在定位物理 PDF 页码 [${pageInput}]。（忽略印刷页码）`
-                    : "正在生成 HTML 结构，翻译内容并映射工程图表..."}
+                    : progress
+                      ? `正在处理第 ${progress.current} / ${progress.total} 批，翻译内容并映射工程图表...`
+                      : '正在生成 HTML 结构，翻译内容并映射工程图表...'}
                 </p>
+
+                {/* 进度条 —— 仅在 GENERATING 且有进度数据时展示 */}
+                {status === AppStatus.GENERATING && progress && (
+                  <div className="mt-3">
+                    <div className="w-full bg-blue-100 rounded-full h-2 overflow-hidden">
+                      <div
+                        className="bg-blue-500 h-2 rounded-full transition-all duration-500"
+                        style={{ width: `${(progress.current / progress.total) * 100}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-blue-600 mt-1 text-right">
+                      {progress.current} / {progress.total} 批完成
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           )}
 
           {status === AppStatus.ERROR && (
-             <div className="bg-red-50 text-red-800 p-4 rounded-xl border border-red-100 flex items-start gap-3">
-             <AlertCircle className="shrink-0 mt-0.5" size={18} />
-             <div>
-               <p className="font-semibold text-sm">重构失败</p>
-               <p className="text-xs mt-1 opacity-80">{errorMsg}</p>
-               <button onClick={handleReset} className="text-xs font-bold underline mt-2 hover:text-red-900">重试</button>
-             </div>
-           </div>
+            <div className="bg-red-50 text-red-800 p-4 rounded-xl border border-red-100 flex items-start gap-3">
+              <AlertCircle className="shrink-0 mt-0.5" size={18} />
+              <div>
+                <p className="font-semibold text-sm">重构失败</p>
+                <p className="text-xs mt-1 opacity-80">{errorMsg}</p>
+                <button onClick={handleReset} className="text-xs font-bold underline mt-2 hover:text-red-900">重试</button>
+              </div>
+            </div>
           )}
         </div>
 
         {/* Right Preview Panel */}
         <div className="lg:col-span-8 h-[600px] lg:h-auto min-h-[500px]">
           {resultHtml ? (
-            <ResultDisplay 
-              htmlContent={resultHtml} 
-              sourceImageBase64={fileData?.base64} 
+            <ResultDisplay
+              htmlContent={resultHtml}
+              sourceImageBase64={fileData?.base64}
               sourceMimeType={fileData?.mimeType}
             />
           ) : (
